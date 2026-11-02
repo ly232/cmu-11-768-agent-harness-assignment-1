@@ -152,6 +152,7 @@ class Agent:
 
         # TODO(1.1.a): Add machinery to maintain agent state as it takes actions
         # and observes the results.
+        self.history: list[dict[str, Any]] = []
 
     def load_skills(self, skills_path: Path) -> dict[str, dict[str, str]]:
         """Load the skill folders exposed to this agent."""
@@ -194,6 +195,7 @@ class Agent:
         self.api_responses.append(response.model_dump(mode="json"))
         self.steps_taken += 1
         message = self.process_response(response)
+        self.history.append(deepcopy(message))  # Add model response (action).
         tool_names = [
             call.get("function", {}).get("name", "unknown")
             for call in message.get("tool_calls", [])
@@ -227,7 +229,11 @@ class Agent:
 
         # You want to be careful about which attributes of the class you modify
         # here as they may also be handled by the subclasses.
-        raise NotImplementedError
+        
+        return [
+            { 'role': 'system', 'content': self.system_prompt },
+            { 'role': 'user', 'content': self.task_prompt },
+        ] + deepcopy(self.history)
 
     def estimate_active_prompt_tokens(self) -> int:
         """Estimate the next prompt, calibrated by the provider's latest usage."""
@@ -336,7 +342,17 @@ class Agent:
             # and handles the threshold, and tracks compaction events for
             # logging.
 
-            raise NotImplementedError
+            while not self.finished:
+                # Rate limit & optional compaction.
+                if self.steps_taken >= self.step_limit:
+                    raise StepLimitError(
+                        f"Agent exceeded step limit of {self.step_limit}"
+                    )
+                self.maybe_compact_context()
+                # Call LLM.
+                message = self.query_language_model()
+                observations = self.execute_tool_calls(message.get('tool_calls', []))
+                self.history.extend(deepcopy(observations))  # Add tool calls (obs).
         finally:
             # This block is provided infrastructure. Do not modify it: a
             # trajectory is required even when a run fails.

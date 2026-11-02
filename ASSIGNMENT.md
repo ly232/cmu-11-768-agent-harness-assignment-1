@@ -42,8 +42,8 @@ cp .env.example .env
 to create the file that contains your environment secrets – primarily LLM API details. You will receive instructions on how to access credits for an LLM provider if you are enrolled in the course. Follow the instructions to generate an API key, and ensure you configure the base URL for the service correctly.
 
 ```dotenv
-OPENAI_BASE_URL=<OpenAI-compatible base URL>
-OPENAI_API_KEY=...
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+OPENAI_API_KEY=<deepseek api key>
 OPENAI_MODEL=deepseek/deepseek-v4-flash-0731
 OPENAI_MAX_RETRIES=5
 ```
