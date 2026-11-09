@@ -56,6 +56,7 @@ class CodeAgent(Agent):
 
         # TODO(Part 1.3): Make the `execute` and `send_message` tools available
         # to the agent.
+        self.tools.extend([EXECUTE_TOOL, SEND_MESSAGE_TOOL])
 
         # TODO(1.1.b): Construct the system prompt and task_prompt. These
         # should be usable by the `Agent.build_prompt` method.
@@ -77,4 +78,81 @@ class CodeAgent(Agent):
         # one message per call (there may be multiple tool calls in one agent
         # response!). Malformed JSON and unknown tools must become recoverable
         # observations relayed to the agent instead of exceptions.
-        raise NotImplementedError
+        
+        # uv run pytest -s tests/test_agent.py -k test_prompt_carries_task_action_and_result
+        # print(json.dumps(tool_calls, indent=2), flush=True)
+        '''
+        tool call result schema:
+        {
+            "role": "tool",
+            "tool_call_id": tc["id"],
+            "content": "..."
+        }
+        '''
+        tool_call_results = []
+        for tc in tool_calls:
+            result = {}
+            if tc.get("type") != "function":
+                result = {
+                    'role': "tool",
+                    'tool_call_id': tc.get("id"),
+                    'content': "Error: tool call type is not 'function'."
+                }
+                tool_call_results.append(result)
+                continue
+            func = tc.get("function", {})
+            name = func.get("name")
+            try:
+                args = json.loads(func.get("arguments", {}))
+                command = args.get("command")
+                shell = args.get("shell", True)
+                cwd = args.get("cwd")
+                timeout = args.get("timeout")
+                env = args.get("env")
+            except Exception as e:
+                result = {
+                    "role": "tool",
+                    "tool_call_id": tc.get("id"),
+                    "content": f"Error parsing tool call arguments: {str(e)}"
+                }
+                tool_call_results.append(result)
+                continue
+            if name == "execute":
+                try:
+                    obs = self.env.execute(
+                        command=command,
+                        shell=shell,
+                        cwd=cwd,
+                        timeout=timeout,
+                        env=env,
+                    )
+                    result = {
+                        "role": "tool",
+                        "tool_call_id": tc.get("id"),
+                        "content": json.dumps(obs)
+                    }
+                    tool_call_results.append(result)
+                except Exception as e:
+                    result = {
+                        "role": "tool",
+                        "tool_call_id": tc.get("id"),
+                        "content": str(e)
+                    }
+                    tool_call_results.append(result)
+            elif name == "send_message":
+                summary = args.get("summary")
+                # For send_message, we just return the message as an observation.
+                result = {
+                    "role": "tool",
+                    "tool_call_id": tc.get("id"),
+                    "content": f"Message sent: {summary}"
+                }
+                tool_call_results.append(result)
+            else:
+                result = {
+                    "role": "tool",
+                    "tool_call_id": tc.get("id"),
+                    "content": f"Unknown tool: {name}"
+                }
+                tool_call_results.append(result)
+        return tool_call_results
