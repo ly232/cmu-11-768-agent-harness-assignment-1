@@ -11,6 +11,7 @@ import json
 import logging
 import math
 import os
+import yaml
 from pathlib import Path
 from typing import Any
 
@@ -165,7 +166,52 @@ class Agent:
         # ``content`` of the skill file for ``invoke_skill``. Reject duplicate
         # names and malformed or missing frontmatter with a clear
         # ``ValueError``.
-        raise NotImplementedError
+
+        if not skills_path.exists() or not skills_path.is_dir():
+            raise ValueError(f"Skills path {skills_path} does not exist or is not a directory.")
+
+        skills = {}
+        for skill_dir in skills_path.iterdir():
+            if not skill_dir.is_dir():
+                continue
+            skill_file = skill_dir / "SKILL.md"
+            if not skill_file.exists() or not skill_file.is_file():
+                raise ValueError(f"Skill file {skill_file} does not exist.")
+            with open(skill_file, "r", encoding="utf-8") as f:
+                content = f.read()
+                num_splits = 0
+                lines = content.splitlines()
+                frontmatter_text = []
+                if not lines or lines[0].strip() != "---":
+                    raise ValueError(f"Skill file {skill_file} is missing frontmatter.")
+                for line in lines:
+                    if num_splits == 2:
+                        break
+                    if line.strip() == "---":
+                        num_splits += 1
+                        continue
+                    frontmatter_text.append(line)
+                if num_splits < 2:
+                    raise ValueError(f"Skill file {skill_file} is missing frontmatter.")
+                frontmatter_text = "\n".join(frontmatter_text)
+                try:
+                    metadata = yaml.safe_load(frontmatter_text)
+                except yaml.YAMLError as exc:
+                    raise ValueError(f"Skill file {skill_file} has invalid YAML frontmatter.") from exc
+                if metadata is None or not isinstance(metadata, dict) or "name" not in metadata:
+                    raise ValueError(f"Skill file {skill_file} has invalid frontmatter.")
+                name = metadata.get("name")
+                description = metadata.get("description")
+                if not isinstance(name, str) or not name.strip():
+                    raise ValueError(f"Skill file {skill_file} has invalid 'name' in frontmatter.")
+                if not isinstance(description, str) or not description.strip():
+                    raise ValueError(f"Skill file {skill_file} has invalid 'description' in frontmatter.")
+                if name in skills:
+                    raise ValueError(f"Duplicate skill name {name} in {skill_file}.")
+                catalog_metadata = f"name: {name}\ndescription: {description}"
+                skills[name] = {"metadata": catalog_metadata, "content": content}
+
+        return skills
 
     def query_language_model(self) -> dict[str, Any]:
         """Send one tool-enabled Chat Completions request and normalize it."""

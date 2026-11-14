@@ -68,6 +68,19 @@ class CodeAgent(Agent):
         self.task_prompt = task
         # TODO(1.4): If any skills are available to the agent, make their
         # descriptions/metadata available to the agent in the prompt.
+        if self.skills:
+            catalog = "\n".join(
+                skill["metadata"] for skill in self.skills.values()
+            )
+            self.system_prompt += f"""
+Reusable skills are available. Call `invoke_skill` with a
+skill's name to load its instructions, and follow them in place
+of your default approach.
+
+<skills>
+{catalog}
+</skills>
+"""
 
     def execute_tool_calls(
         self, tool_calls: list[dict[str, Any]]
