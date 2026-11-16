@@ -228,7 +228,9 @@ class Agent:
                 model=self.model,
                 messages=messages,
                 tools=self.tools,
-                reasoning_effort="medium",
+                # This needs to be omitted due to OpenAI API errors:
+                # openai.BadRequestError: Error code: 400 - {'error': {'message': "Function tools with reasoning_effort are not supported for gpt-5.6-luna in /v1/chat/completions. Touse function tools, use /v1/responses or set reasoning_effort to 'none'.", 'type': 'invalid_request_error', 'param': 'reasoning_effort', 'code': None}}
+                # reasoning_effort="medium",
                 max_completion_tokens=4096,
             )
         except Exception as exc:

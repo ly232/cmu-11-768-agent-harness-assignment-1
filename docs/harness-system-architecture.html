@@ -1,0 +1,179 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent Harness — High-Level System Architecture</title>
+<style>
+  :root { color-scheme: light; --bg:#f8fafc; --fg:#172033; --muted:#5b6475; --line:#64748b; --neutral:#e2e8f0; --input:#bfdbfe; --process:#c7d2fe; --storage:#99f6e4; --external:#fde68a; --risk:#fecaca; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1320px; margin:28px auto; padding:0 20px; }
+  svg { width:100%; height:auto; display:block; background:#fff; border:1px solid #cbd5e1; border-radius:14px; }
+  .title { font-size:25px; font-weight:700; fill:var(--fg); }
+  .subtitle { font-size:14px; fill:var(--muted); }
+  .label { font-size:16px; font-weight:650; fill:var(--fg); }
+  .small { font-size:13px; fill:var(--muted); }
+  .tiny { font-size:12px; fill:var(--muted); }
+  .node { stroke:var(--line); stroke-width:1.4; }
+  .neutral { fill:var(--neutral); } .input { fill:var(--input); } .process { fill:var(--process); }
+  .storage { fill:var(--storage); } .external { fill:var(--external); } .risk { fill:var(--risk); }
+  .edge { stroke:var(--line); stroke-width:2; fill:none; marker-end:url(#arrow); }
+  .edge-dashed { stroke:var(--line); stroke-width:1.6; stroke-dasharray:7 6; fill:none; marker-end:url(#arrow); }
+  .zone { fill:none; stroke:var(--line); stroke-width:1.2; stroke-dasharray:7 6; opacity:.85; }
+  .zone-label { font-size:14px; font-weight:650; fill:var(--muted); }
+  .legend { font-size:12px; fill:var(--muted); }
+</style>
+<main>
+<svg viewBox="0 0 1320 940" role="img" aria-labelledby="title desc">
+  <title id="title">High-level architecture of the CMU agent harness</title>
+  <desc id="desc">A host runner starts an agent loop. The loop sends prompts to an OpenAI-compatible model, dispatches tool calls, and returns observations from an isolated Modal sandbox. The sandbox contains the testbed, optional chess server, and SWE-ReX runtime. An evaluation path applies patches and tests, producing a report and trajectory artifacts.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/></marker>
+  </defs>
+
+  <text x="44" y="44" class="title">Agent Harness — first-principles architecture</text>
+  <text x="44" y="70" class="subtitle">Primary interaction is local CLI/pytest; there is no harness web UI or inbound API. The chess app is the only optional browser-facing surface.</text>
+
+  <!-- Trust / deployment zones -->
+  <rect x="28" y="95" width="1264" height="178" rx="12" class="zone"/>
+  <text x="48" y="120" class="zone-label">LOCAL HOST / ORCHESTRATION</text>
+  <rect x="28" y="292" width="1264" height="410" rx="12" class="zone"/>
+  <text x="48" y="317" class="zone-label">MODAL SANDBOX — ISOLATED TESTBED</text>
+  <rect x="28" y="722" width="1264" height="184" rx="12" class="zone"/>
+  <text x="48" y="747" class="zone-label">ARTIFACTS / VERIFICATION</text>
+
+  <!-- host -->
+  <rect x="55" y="135" width="205" height="112" rx="10" class="node input"/>
+  <text x="78" y="166" class="label">Run triggers</text>
+  <text x="78" y="188" class="small">CLI / make targets</text>
+  <text x="78" y="208" class="small">pytest / unit tests</text>
+  <text x="78" y="228" class="small">starts local Python process</text>
+
+  <rect x="310" y="135" width="285" height="112" rx="10" class="node process"/>
+  <text x="334" y="169" class="label">Shared Agent loop</text>
+  <text x="334" y="193" class="small">build prompt → request action</text>
+  <text x="334" y="213" class="small">→ dispatch tools → append observations</text>
+  <text x="334" y="233" class="small">CodeAgent / ChessAgent · step limit</text>
+
+  <rect x="645" y="145" width="190" height="92" rx="10" class="node external"/>
+  <text x="675" y="177" class="label">LLM provider</text>
+  <text x="675" y="200" class="small">OpenAI-compatible</text>
+  <text x="675" y="219" class="small">tool-calling API</text>
+
+  <rect x="885" y="135" width="350" height="112" rx="10" class="node external"/>
+  <text x="910" y="169" class="label">Credentials / config</text>
+  <text x="910" y="193" class="small">OPENAI_API_KEY + BASE_URL + MODEL</text>
+  <text x="910" y="213" class="small">loaded from environment or .env</text>
+  <text x="910" y="233" class="small">Modal token via `modal setup` config</text>
+
+  <!-- sandbox -->
+  <rect x="55" y="350" width="260" height="128" rx="10" class="node external"/>
+  <text x="80" y="384" class="label">Modal Sandbox</text>
+  <text x="80" y="408" class="small">ephemeral compute + port tunnel</text>
+  <text x="80" y="428" class="small">starts Unix processes: SWE-ReX</text>
+  <text x="80" y="448" class="small">lifecycle managed by Environment</text>
+
+  <rect x="355" y="335" width="300" height="158" rx="10" class="node process"/>
+  <text x="381" y="369" class="label">SWE-ReX runtime</text>
+  <text x="381" y="393" class="small">remote command execution</text>
+  <text x="381" y="413" class="small">cwd, env, timeout, exit code</text>
+  <text x="381" y="433" class="small">stdout/stderr → observation</text>
+  <text x="381" y="465" class="tiny">Environment.execute(...)</text>
+
+  <rect x="695" y="335" width="270" height="158" rx="10" class="node storage"/>
+  <text x="721" y="369" class="label">Task testbed</text>
+  <text x="721" y="393" class="small">/testbed repository</text>
+  <text x="721" y="413" class="small">Dockerfile + dependencies</text>
+  <text x="721" y="433" class="small">candidate patch applied here</text>
+  <text x="721" y="465" class="tiny">built by build_testbed_image()</text>
+
+  <rect x="1005" y="335" width="240" height="158" rx="10" class="node input"/>
+  <text x="1030" y="369" class="label">Tool targets</text>
+  <text x="1030" y="393" class="small">shell / repo / tests</text>
+  <text x="1030" y="413" class="small">commands become child processes</text>
+  <text x="1030" y="433" class="small">skills execute here</text>
+  <text x="1030" y="465" class="tiny">no inbound harness API</text>
+
+  <rect x="355" y="535" width="300" height="122" rx="10" class="node risk"/>
+  <text x="381" y="569" class="label">Chess server (optional)</text>
+  <text x="381" y="593" class="small">/api/state · /api/move</text>
+  <text x="381" y="613" class="small">patched app, exposed by tunnel</text>
+  <text x="381" y="637" class="tiny">ChessSandbox starts + health-checks it</text>
+
+  <rect x="695" y="535" width="270" height="122" rx="10" class="node neutral"/>
+  <text x="721" y="569" class="label">Domain state</text>
+  <text x="721" y="593" class="small">test outputs, git diff, board state</text>
+  <text x="721" y="613" class="small">errors are recoverable observations</text>
+  <text x="721" y="637" class="tiny">feeds the next prompt</text>
+
+  <rect x="1005" y="535" width="240" height="122" rx="10" class="node external"/>
+  <text x="1030" y="569" class="label">Chess HTTP surface</text>
+  <text x="1030" y="593" class="small">agent client: POST /api/move</text>
+  <text x="1030" y="613" class="small">browser: GET / + static UI</text>
+  <text x="1030" y="637" class="tiny">optional tunnel URL; not harness control</text>
+
+  <!-- artifacts -->
+  <rect x="55" y="775" width="250" height="92" rx="10" class="node storage"/>
+  <text x="80" y="809" class="label">Trajectory log</text>
+  <text x="80" y="833" class="small">prompts · responses · compactions</text>
+  <text x="80" y="853" class="small">saved even on failure</text>
+
+  <rect x="350" y="775" width="250" height="92" rx="10" class="node storage"/>
+  <text x="375" y="809" class="label">Submitted patch</text>
+  <text x="375" y="833" class="small">patch.txt → local artifact</text>
+  <text x="375" y="853" class="small">or result/game JSON</text>
+
+  <rect x="645" y="765" width="300" height="112" rx="10" class="node process"/>
+  <text x="670" y="799" class="label">Evaluation harness</text>
+  <text x="670" y="823" class="small">apply candidate patch</text>
+  <text x="670" y="843" class="small">apply hidden/public test patch</text>
+  <text x="670" y="863" class="small">run command + parse statuses</text>
+
+  <rect x="990" y="775" width="255" height="92" rx="10" class="node external"/>
+  <text x="1015" y="809" class="label">Report</text>
+  <text x="1015" y="833" class="small">pass/fail · resolved · errors</text>
+  <text x="1015" y="853" class="small">fail-to-pass / pass-to-pass</text>
+
+  <!-- connectors: host -->
+  <path d="M260 191 H310" class="edge"/>
+  <path d="M595 191 H645" class="edge"/>
+  <path d="M1060 135 V112 H740 V145" class="edge-dashed"/>
+  <path d="M452 247 V335" class="edge"/>
+  <path d="M595 191 C650 260 780 280 825 335" class="edge-dashed"/>
+  <path d="M185 350 V280 C185 260 185 247 185 237" class="edge-dashed"/>
+
+  <!-- connectors: sandbox -->
+  <path d="M315 414 H355" class="edge"/>
+  <path d="M655 414 H695" class="edge"/>
+  <path d="M965 414 H1005" class="edge"/>
+  <path d="M505 493 V535" class="edge"/>
+  <path d="M825 493 V535" class="edge"/>
+  <path d="M1005 596 H965 C930 596 930 493 930 493" class="edge"/>
+  <path d="M655 596 H695" class="edge-dashed"/>
+  <path d="M825 535 V493" class="edge-dashed"/>
+  <path d="M505 535 C505 510 505 500 505 493" class="edge-dashed"/>
+
+  <!-- connectors: artifacts -->
+  <path d="M452 247 C452 700 180 700 180 775" class="edge-dashed"/>
+  <path d="M520 493 C520 680 475 710 475 775" class="edge-dashed"/>
+  <path d="M825 657 V765" class="edge"/>
+  <path d="M945 821 H990" class="edge"/>
+  <path d="M695 821 H600" class="edge-dashed"/>
+  <path d="M990 850 C900 900 350 900 305 850" class="edge-dashed"/>
+
+  <!-- relationship labels -->
+  <text x="270" y="180" class="tiny">starts local run</text>
+  <text x="605" y="180" class="tiny">prompt + tools</text>
+  <text x="386" y="292" class="tiny">tool calls</text>
+  <text x="972" y="404" class="tiny">dispatch / execute</text>
+  <text x="512" y="524" class="tiny">HTTP</text>
+  <text x="836" y="524" class="tiny">observations</text>
+  <text x="700" y="755" class="tiny">grade</text>
+
+  <!-- legend -->
+  <rect x="48" y="886" width="16" height="10" class="input node"/><text x="70" y="896" class="legend">input / entry</text>
+  <rect x="166" y="886" width="16" height="10" class="process node"/><text x="188" y="896" class="legend">control / compute</text>
+  <rect x="310" y="886" width="16" height="10" class="storage node"/><text x="332" y="896" class="legend">state / artifact</text>
+  <rect x="440" y="886" width="16" height="10" class="external node"/><text x="462" y="896" class="legend">external service</text>
+  <rect x="590" y="886" width="16" height="10" class="risk node"/><text x="612" y="896" class="legend">domain app</text>
+  <line x1="720" y1="891" x2="752" y2="891" class="edge-dashed"/><text x="762" y="896" class="legend">optional / persisted relation</text>
+</svg>
+</main>
